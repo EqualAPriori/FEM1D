@@ -1,4 +1,11 @@
 // Class file for FEM
+// Note currently coded s.t. a FEM class instance can be built to build matrices/write results 
+// to arrays whos addresses are pointed in (instead of opearating only on its own matrices)
+// "normal" class behavior (operating on own data) is provided via overloaded constructors
+// although if feeding in user matrices, one needs to be careful that they are properly zeroed first
+// since I only implement sparse zeroing
+//
+
 #include "FEM.h"
 #include <iostream>
 
@@ -19,16 +26,23 @@ FEM::FEM(int ord){
 
 // Establish FEM grid given coarse nodes (i.e. depending on GLL order, FEM fills in intermediate points)
 // zcoords should be in strictly increasing order, elementary validation only done in xiToZ() and zToXi()
+// 2017.07.25
 void FEM::setGrid(vector<double>& zcoords){
+	int flag = 0; //to see if dim of zcoord changed
+	if(zcoarse.size() != zcoords.size())
+		flag=1;
+
 	zcoarse.assign(zcoords.begin(), zcoords.end());
 	Nel = zcoarse.size() - 1;
 	Nz = Nel*order + 1;
 
-	zs.resize(Nz,0);
-	zsOfElemE.resize(Nel, vector<double>(NGLL,0));
-	indOfElemE.resize(Nel, vector<int>(NGLL,0));
+	if(flag==1){ //currently misses edge case when `order` changes. hopefully never change order in usage
+		zs.resize(Nz,0);
+		zsOfElemE.resize(Nel, vector<double>(NGLL));
+		indOfElemE.resize(Nel, vector<int>(NGLL));
+	}
 
-	int el, ii;
+	int el, ii, ind;
 	vector<double> temp;
 	for(el = 0; el < Nel; ++el){
 		//temp = xiToZ(xis,zcoarse[el],zcoarse[el+1]);
@@ -36,10 +50,236 @@ void FEM::setGrid(vector<double>& zcoords){
 		zsOfElemE[el].assign(temp.begin(),temp.end());
 
 		for(ii=0; ii<NGLL; ++ii){
-			indOfElemE[el][ii] = (el)*(NGLL-1) + ii;
+			ind = (el)*(NGLL-1) + ii;
+			indOfElemE[el][ii] = ind;
+			zs[ind] = zsOfElemE[el][ii];
+		}
+	}
+
+	if(flag==1){
+		D2loc.resize(NGLL, vector<double>(NGLL));
+		D2.resize(Nz*Nz,0);
+		M.resize(Nz*1,0);	// by construction a diagonal matrix, so we only keep the diagonal.
+		K.resize(Nz*Nz,0);
+		Op.resize(Nz*Nz,0);
+		f.resize(Nz,0);
+	}
+}
+
+// Building Laplacian Matrix
+// default is overloaded function with eps = 1 everywhere
+// gives NEGATIVE laplacian -d(eps (du)), or -(eps*u'(z))' like in Poisson equation
+// 2017.07.26
+void FEM::BuildLaplacian(vector<double>& eps, vector<double>* D2out){
+	if(eps.size() != zs.size()){
+		cout << "Error: `epsilon` size is incongruent with zs" << endl;
+		throw;
+	}
+
+	int el,ii,jj,kk,ind1,ind2,indColMajor;
+	double jacob;
+
+	//sparse zero-resetting. must be done separately from assembly becuase there are repeats
+	//other elements were already zeroed in setGrid();
+	for(el=0; el<Nel; el++){
+		for(ii=0; ii<NGLL; ii++){
+			ind1 = indOfElemE[el][ii];
+			for(jj=0; jj<NGLL; jj++){
+				ind2 = indOfElemE[el][jj];
+				(*D2out)[ij(ind1,ind2,Nz)] = 0;
+			}
+		}
+	}
+
+	//assembly step
+	for(el=0; el<Nel; el++){
+		jacob = 2.0/(zcoarse[el+1]-zcoarse[el]);
+
+		for(ii=0; ii<NGLL; ii++){
+			ind1 = indOfElemE[el][ii];
+			for(jj=0; jj<NGLL; jj++){
+				ind2 = indOfElemE[el][jj];
+				indColMajor = ij(ind1,ind2,Nz);
+				for(kk=0; kk<NGLL; kk++){ //index over nodes in element
+					(*D2out)[indColMajor] += jacob * hs[ii][kk] * hs[jj][kk] * ws[kk] * eps[indOfElemE[el][kk]];
+				}
+			}
 		}
 	}
 }
+void FEM::BuildLaplacian(vector<double>* D2out){
+	int el,ii,jj,kk,ind1,ind2,indColMajor;
+	double jacob;
+
+	//sparse zero-resetting. must be done separately from assembly becuase there are repeats
+	//other elements were already zeroed in setGrid();
+	for(el=0; el<Nel; el++){
+		for(ii=0; ii<NGLL; ii++){
+			ind1 = indOfElemE[el][ii];
+			for(jj=0; jj<NGLL; jj++){
+				ind2 = indOfElemE[el][jj];
+				(*D2out)[ij(ind1,ind2,Nz)] = 0;
+			}
+		}
+	}
+
+	//assembly step
+	for(el=0; el<Nel; el++){
+		jacob = 2.0/(zcoarse[el+1]-zcoarse[el]);
+
+		for(ii=0; ii<NGLL; ii++){
+			ind1 = indOfElemE[el][ii];
+			for(jj=0; jj<NGLL; jj++){
+				ind2 = indOfElemE[el][jj];
+				indColMajor = ij(ind1,ind2,Nz);
+				for(kk=0; kk<NGLL; kk++){ //index over nodes in element
+					(*D2out)[indColMajor] += jacob * hs[ii][kk] * hs[jj][kk] * ws[kk];
+				}
+			}
+		}
+	}
+}
+
+
+// Building FEM source
+void FEM::BuildSource(vector<double>& source, vector<double>* fout){
+	if(source.size() != zs.size()){
+		cout << "Error: `source` size is incongruent with zs" << endl;
+		throw;
+	}
+
+	int el,ii,indZ;
+	double jacob;
+
+	//Unfortunately need to reset vector
+    //&memset(&f[0], 0, f.size() * sizeof f[0]); // fastest in all circumstances
+	fill(fout->begin(),fout->end(),0); //must use -O3 optimization flag for speed! see https://stackoverflow.com/questions/8848575/fastest-way-to-reset-every-value-of-stdvectorint-to-0
+
+	// Assemble source vector
+	for(el=0; el<Nel; el++){
+		for(ii=0; ii<NGLL; ii++){
+			indZ = indOfElemE[el][ii];
+			jacob = 0.5*(zcoarse[el+1]-zcoarse[el]);
+			(*fout)[indZ] += source[indZ] * ws[ii] *jacob;
+		}
+	}
+}
+
+// Building FEM mass (should be diagonal term if using GLL evaluation
+void FEM::BuildMass(vector<double>& mass, vector<double>* Mout){
+	if(mass.size() != zs.size()){
+		cout << "Error: `source` size is incongruent with zs" << endl;
+		throw;
+	}
+
+	int el, ii, indZ, indColMajor;
+	double jacob;
+	// Only a sparse reset is needed, along the diagonal
+	for(ii=0; ii<Nz; ii++){
+		(*Mout)[ii] = 0;
+	}
+
+	// Assemble mass diagonal
+	for(el=0; el<Nel; el++){
+		jacob = 0.5*(zcoarse[el+1]-zcoarse[el]);
+		for(ii=0; ii<NGLL; ii++){
+			indZ = indOfElemE[el][ii];
+
+			//indColMajor = ij(indZ,indZ,Nz);
+			//(*Mout)[indColMajor] += mass[indZ] * ws[ii] * jacob;
+			(*Mout)[indZ] += mass[indZ] * ws[ii] * jacob;
+		}
+	}
+	cout << endl;
+}
+
+// Building FEM boundary, modifies both the operator matrix `A` and the source term `b` for Ax=b
+// done in a way s.t. for Dirichlet, keep extra rows and columns, don't delete row/column
+// In the future, can consider allowing for internal interfaces/nodal conditions
+// Format of boundary matrix (2x3) is for: eps*dpsi/dx - alpha*psi = beta (note sign in front of alpha)
+// <position>	<type>		<alpha> 	<beta>
+// left bdry 	0 = dirich.    #		   #
+// right bdry   1 = mixed 	0 if Neumann   #
+//							1 default if dirich.
+// ASSUMES `A` is square, and `b` is the same size
+//
+void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>* b){
+	int icol;
+	int N = sqrt(A->size());
+
+	if(N!=b->size()){
+		cout << "Matrix `A` size incommensurate with forcing term `b`" << endl;
+		throw;
+	}
+	//Left
+	if(bc[0][0]==0){//Dirichlet
+		(*b)[0] = bc[0][2] * (zcoarse[1]-zcoarse[0]); //scale by length of element s.t. commensurate with scale of F.E.M.
+		(*A)[0] = 1.0 * (zcoarse[1]-zcoarse[0]);		 //this scaling only makes sense if on same zgrid as FEM...
+		for(icol=1; icol< N; icol++){
+			(*A)[ij(0,icol,N)] = 0.0;
+		}
+	}else{//Mixed
+		(*b)[0] -= bc[0][2];
+		(*A)[ij(0,0,N)] += bc[0][1];
+	}
+	//Right
+	if(bc[1][0]==0){//Dirichlet
+		(*b)[N-1] = bc[1][2] * (zcoarse[Nel]-zcoarse[Nel-1]);
+		(*A)[ij(N-1,N-1,N)] = 1.0 * (zcoarse[Nel]-zcoarse[Nel-1]);
+		for(icol=0; icol<N-1; icol++){
+			(*A)[ij(N-1,icol,N)] = 0.0;
+		}
+	}else{//Mixed
+		(*b)[N-1] += bc[1][2];
+		(*A)[ij(N-1,N-1,N)] -= bc[1][1];
+	}	
+}
+
+// Building FEM integral
+// need to feed in a matrix of the kernel *evaluated* at the nodes
+// ASSUUMES input matrices are square and on same grid as stored in FEM object
+void FEM::BuildIntegral(vector<double>& kernel, vector<double> *Kout){
+	if(kernel.size() != Kout->size()){
+		cout << "Error: `kernel` size is incongruent with `Kout`" << endl;
+		throw;
+	}
+	if(kernel.size() != Nz*Nz){
+		cout << "Error: `kernel` size incongruent with `Nz`" << endl;
+	}
+	if(Kout->size() != Nz*Nz){
+		cout << "Error: `Kout` size incongruent with `Nz`" << endl;
+	}
+
+	int el1,el2, ii,jj, ind1,ind2, indColMajor;
+	double w1,w2, l1,l2;
+
+	// zeroing
+	for(ii=0; ii<Kout->size(); ii++){ (*Kout)[ii] = 0; }
+
+	//assembly step
+	for(el1=0; el1<Nel; el1++){
+		for(el2=0; el2<Nel; el2++){
+			for(ii=0; ii<NGLL; ii++){
+				for(jj=0; jj<NGLL; jj++){
+					ind1 = indOfElemE[el1][ii];
+					ind2 = indOfElemE[el2][jj];
+
+					w1 = ws[ii];
+					w2 = ws[jj];
+					l1 = zcoarse[el1+1] - zcoarse[el1];
+					l2 = zcoarse[el2+1] - zcoarse[el2];
+
+					indColMajor = ij(ind1,ind2,Nz);
+
+					//cout << ind1 << " " << ind2 << " " << w1 << " " << w2 << " " << l1 << " " << l2 << endl << flush;
+					(*Kout)[indColMajor] += 0.25*w1*w2*l1*l2*kernel[indColMajor];
+				}
+			}
+		}
+	}
+
+}
+
 
 // Gauss-Lobatto-Legendre quadrature values. Taken from Ampuero (Caltech) and Wolfram
 // http://mathworld.wolfram.com/LobattoQuadrature.html
@@ -97,10 +337,11 @@ void FEM::GetGLL(int npts, vector<double>* xi, vector<double>* w, vector<vector<
 	}
 }
 
-
-//converting coordinates
+// converting coordinates
+// 2017.07.25
 void FEM::xiToZ(vector<double>& xi, double zleft, double zright, vector<double>* z){
-		z->assign(xi.begin(),xi.end());
+		if(z->size() != xi.size())
+			z->assign(xi.begin(),xi.end());
 		if(zleft >= zright){
 			cout << "Error: zleft >= zright in xiToZ()" << endl;
 			return;
@@ -111,10 +352,11 @@ void FEM::xiToZ(vector<double>& xi, double zleft, double zright, vector<double>*
 		for(ii=0; ii < xi.size(); ii++){
 			(*z)[ii] = zleft + len*(xi[ii] + 1.0)/2.0;
 		}
-	}
+}
 
 void FEM::zToXi(vector<double>& z, double zleft, double zright, vector<double>* xi){
-		xi->assign(z.begin(),z.end());
+		if(xi->size() != z.size())
+			xi->assign(z.begin(),z.end());
 		if(zleft >= zright){
 			cout << "Error: zleft >= zright in zToXi()" << endl;
 			return;
@@ -125,8 +367,7 @@ void FEM::zToXi(vector<double>& z, double zleft, double zright, vector<double>* 
 		for(ii=0; ii < z.size(); ii++){
 			(*xi)[ii] = 2.0*(z[ii] - zleft)/len - 1.0;
 		}
-	}
-
+}
 
 //int newData[5] = {0, 1, 2, 3, 4};
 
