@@ -1,9 +1,10 @@
-// Class file for FEM
+// Class file for 
+//
 // Note currently coded s.t. a FEM class instance can be built to build matrices/write results 
-// to arrays whos addresses are pointed in (instead of opearating only on its own matrices)
-// "normal" class behavior (operating on own data) is provided via overloaded constructors
+// to arrays whos addresses are pointed in (instead of opearating only on its own matrices).
+// "Normal" class behavior (operating on own data) is provided via overloaded constructors
 // although if feeding in user matrices, one needs to be careful that they are properly zeroed first
-// since I only implement sparse zeroing
+// since I only implement sparse zeroing.
 //
 
 #include "FEM.h"
@@ -142,6 +143,7 @@ void FEM::BuildLaplacian(vector<double>* D2out){
 
 
 // Building FEM source
+// 2017.07.27
 void FEM::BuildSource(vector<double>& source, vector<double>* fout){
 	if(source.size() != zs.size()){
 		cout << "Error: `source` size is incongruent with zs" << endl;
@@ -166,6 +168,7 @@ void FEM::BuildSource(vector<double>& source, vector<double>* fout){
 }
 
 // Building FEM mass (should be diagonal term if using GLL evaluation
+// 2017.07.27
 void FEM::BuildMass(vector<double>& mass, vector<double>* Mout){
 	if(mass.size() != zs.size()){
 		cout << "Error: `source` size is incongruent with zs" << endl;
@@ -202,7 +205,7 @@ void FEM::BuildMass(vector<double>& mass, vector<double>* Mout){
 // right bdry   1 = mixed 	0 if Neumann   #
 //							1 default if dirich.
 // ASSUMES `A` is square, and `b` is the same size
-//
+// 2017.07.27
 void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>* b){
 	int icol;
 	int N = sqrt(A->size());
@@ -238,6 +241,7 @@ void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>
 // Building FEM integral
 // need to feed in a matrix of the kernel *evaluated* at the nodes
 // ASSUUMES input matrices are square and on same grid as stored in FEM object
+// 2017.07.27
 void FEM::BuildIntegral(vector<double>& kernel, vector<double> *Kout){
 	if(kernel.size() != Kout->size()){
 		cout << "Error: `kernel` size is incongruent with `Kout`" << endl;
@@ -277,7 +281,6 @@ void FEM::BuildIntegral(vector<double>& kernel, vector<double> *Kout){
 			}
 		}
 	}
-
 }
 
 
@@ -369,19 +372,4 @@ void FEM::zToXi(vector<double>& z, double zleft, double zright, vector<double>* 
 		}
 }
 
-//int newData[5] = {0, 1, 2, 3, 4};
-
-// assign(#,val) function will reinitialize the vector to # elements with value `val`
-// assign(newData, newData + count); where it will range over the array from first pointer to last
-
-// for 2D MxN:
-//std::vector<std::vector<int>> fog(
-//    M,
-//    std::vector<int>(N, valToFillMatrices));
-
-//matrix.resize( row_count , vector<int>( column_count , initialization_value ) );
-
-//myVector.resize(n);
-//for (int i = 0; i < n; ++i)
-//    myVector[i].resize(m);
 
