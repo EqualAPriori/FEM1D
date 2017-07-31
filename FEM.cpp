@@ -1,4 +1,4 @@
-// Class file for 
+// Class file for FEM class
 //
 // Note currently coded s.t. a FEM class instance can be built to build matrices/write results 
 // to arrays whos addresses are pointed in (instead of opearating only on its own matrices).
@@ -8,11 +8,13 @@
 //
 
 #include "FEM.h"
-#include <iostream>
 
 FEM::FEM(int ord){
+	setOrder(ord);
+}
+void FEM::setOrder(int ord){
 	if(ord<1){
-		cout << "order is faulty, defaulting to linear order" << endl;
+		cout << "order is too low, defaulting to linear order" << endl;
 		order = 1;
 	}else if(ord>5){
 		cout << "order exceeds current implementation, defaulting to max order = 5" << endl;
@@ -22,7 +24,7 @@ FEM::FEM(int ord){
 	}
 	NGLL = ord+1;
 
-	GetGLL(NGLL, & xis, & ws, & hs);
+	GetGLL(NGLL, & xis, & ws, & hs);	
 }
 
 // Establish FEM grid given coarse nodes (i.e. depending on GLL order, FEM fills in intermediate points)
@@ -59,10 +61,10 @@ void FEM::setGrid(vector<double>& zcoords){
 
 	if(flag==1){
 		D2loc.resize(NGLL, vector<double>(NGLL));
-		D2.resize(Nz*Nz,0);
+		D2.resize(Nz*Nz,0); fill(D2.begin(),D2.end(),0.0);
 		M.resize(Nz*1,0);	// by construction a diagonal matrix, so we only keep the diagonal.
-		K.resize(Nz*Nz,0);
-		Op.resize(Nz*Nz,0);
+		K.resize(Nz*Nz,0);	fill(K.begin(),K.end(),0.0);
+		Op.resize(Nz*Nz,0); fill(Op.begin(),Op.end(),0.0);
 		f.resize(Nz,0);
 	}
 }
@@ -71,7 +73,7 @@ void FEM::setGrid(vector<double>& zcoords){
 // default is overloaded function with eps = 1 everywhere
 // gives NEGATIVE laplacian -d(eps (du)), or -(eps*u'(z))' like in Poisson equation
 // 2017.07.26
-void FEM::BuildLaplacian(vector<double>& eps, vector<double>* D2out){
+void FEM::BuildLaplacian(vector<double>& eps, vector<double>* D2out, bool clear){
 	if(eps.size() != zs.size()){
 		cout << "Error: `epsilon` size is incongruent with zs" << endl;
 		throw;
@@ -82,15 +84,18 @@ void FEM::BuildLaplacian(vector<double>& eps, vector<double>* D2out){
 
 	//sparse zero-resetting. must be done separately from assembly becuase there are repeats
 	//other elements were already zeroed in setGrid();
-	for(el=0; el<Nel; el++){
-		for(ii=0; ii<NGLL; ii++){
-			ind1 = indOfElemE[el][ii];
-			for(jj=0; jj<NGLL; jj++){
-				ind2 = indOfElemE[el][jj];
-				(*D2out)[ij(ind1,ind2,Nz)] = 0;
-			}
-		}
-	}
+	//reset ONLY if boolean flag=1 (default)
+	if(clear==1){
+		for(el=0; el<Nel; el++){
+			for(ii=0; ii<NGLL; ii++){
+				ind1 = indOfElemE[el][ii];
+				for(jj=0; jj<NGLL; jj++){
+					ind2 = indOfElemE[el][jj];
+					(*D2out)[ij(ind1,ind2,Nz)] = 0;
+				}
+			}	
+		}	
+	}	
 
 	//assembly step
 	for(el=0; el<Nel; el++){
@@ -108,18 +113,21 @@ void FEM::BuildLaplacian(vector<double>& eps, vector<double>* D2out){
 		}
 	}
 }
-void FEM::BuildLaplacian(vector<double>* D2out){
+void FEM::BuildLaplacian(vector<double>* D2out, bool clear, double eps ){
 	int el,ii,jj,kk,ind1,ind2,indColMajor;
 	double jacob;
 
 	//sparse zero-resetting. must be done separately from assembly becuase there are repeats
 	//other elements were already zeroed in setGrid();
-	for(el=0; el<Nel; el++){
-		for(ii=0; ii<NGLL; ii++){
-			ind1 = indOfElemE[el][ii];
-			for(jj=0; jj<NGLL; jj++){
-				ind2 = indOfElemE[el][jj];
-				(*D2out)[ij(ind1,ind2,Nz)] = 0;
+	//reset ONLY if boolean flag=1 (default)
+	if(clear==1){
+		for(el=0; el<Nel; el++){
+			for(ii=0; ii<NGLL; ii++){
+				ind1 = indOfElemE[el][ii];
+				for(jj=0; jj<NGLL; jj++){
+					ind2 = indOfElemE[el][jj];
+					(*D2out)[ij(ind1,ind2,Nz)] = 0;
+				}
 			}
 		}
 	}
@@ -134,7 +142,7 @@ void FEM::BuildLaplacian(vector<double>* D2out){
 				ind2 = indOfElemE[el][jj];
 				indColMajor = ij(ind1,ind2,Nz);
 				for(kk=0; kk<NGLL; kk++){ //index over nodes in element
-					(*D2out)[indColMajor] += jacob * hs[ii][kk] * hs[jj][kk] * ws[kk];
+					(*D2out)[indColMajor] += jacob * hs[ii][kk] * hs[jj][kk] * ws[kk] * eps;
 				}
 			}
 		}
@@ -166,6 +174,23 @@ void FEM::BuildSource(vector<double>& source, vector<double>* fout){
 		}
 	}
 }
+void FEM::BuildSource(double source, vector<double>* fout){
+	fout->resize(Nz);
+	fill(fout->begin(),fout->end(),0);
+
+	int el,ii,indZ;
+	double jacob;
+
+	// Assemble source vector
+	for(el=0; el<Nel; el++){
+		for(ii=0; ii<NGLL; ii++){
+			indZ = indOfElemE[el][ii];
+			jacob = 0.5*(zcoarse[el+1]-zcoarse[el]);
+			(*fout)[indZ] += source * ws[ii] *jacob;
+		}
+	}
+}
+
 
 // Building FEM mass (should be diagonal term if using GLL evaluation
 // 2017.07.27
@@ -175,7 +200,7 @@ void FEM::BuildMass(vector<double>& mass, vector<double>* Mout){
 		throw;
 	}
 
-	int el, ii, indZ, indColMajor;
+	int el, ii, indZ;
 	double jacob;
 	// Only a sparse reset is needed, along the diagonal
 	for(ii=0; ii<Nz; ii++){
@@ -193,7 +218,58 @@ void FEM::BuildMass(vector<double>& mass, vector<double>* Mout){
 			(*Mout)[indZ] += mass[indZ] * ws[ii] * jacob;
 		}
 	}
-	cout << endl;
+}
+void FEM::BuildMass(double mass, vector<double>* Mout){
+	Mout->resize(Nz);
+	fill(Mout->begin(),Mout->end(),0);
+	int el, ii, indZ;
+	double jacob;
+
+	for(el=0; el<Nel; el++){
+		jacob = 0.5*(zcoarse[el+1]-zcoarse[el]);
+		for(ii=0; ii<NGLL; ii++){
+			indZ = indOfElemE[el][ii];
+
+			//indColMajor = ij(indZ,indZ,Nz);
+			//(*Mout)[indColMajor] += mass[indZ] * ws[ii] * jacob;
+			(*Mout)[indZ] += mass * ws[ii] * jacob;
+		}
+	}
+}
+//builds into NxN matrix, *WITHOUT* clearing
+// 2017.07.31
+void FEM::BuildMassMatrix(vector<double>& mass, vector<double>* OpOut){
+	if(mass.size() != zs.size()){
+		cout << "Error: `source` size is incongruent with zs" << endl;
+		throw;
+	}
+
+	int el, ii, indZ, indColMajor;
+	double jacob;
+
+	// Assemble mass onto diagonal of output matrix
+	for(el=0; el<Nel; el++){
+		jacob = 0.5*(zcoarse[el+1]-zcoarse[el]);
+		for(ii=0; ii<NGLL; ii++){
+			indZ = indOfElemE[el][ii];
+			indColMajor = ij(indZ,indZ,Nz);
+			(*OpOut)[indColMajor] += mass[indZ] * ws[ii] * jacob;
+		}
+	}
+} 
+void FEM::BuildMassMatrix(double mass, vector<double> *OpOut){
+	int el, ii, indZ, indColMajor;
+	double jacob;
+
+	// Assemble mass onto diagonal of output matrix
+	for(el=0; el<Nel; el++){
+		jacob = 0.5*(zcoarse[el+1]-zcoarse[el]);
+		for(ii=0; ii<NGLL; ii++){
+			indZ = indOfElemE[el][ii];
+			indColMajor = ij(indZ,indZ,Nz);
+			(*OpOut)[indColMajor] += mass * ws[ii] * jacob;
+		}
+	}
 }
 
 // Building FEM boundary, modifies both the operator matrix `A` and the source term `b` for Ax=b
@@ -207,6 +283,13 @@ void FEM::BuildMass(vector<double>& mass, vector<double>* Mout){
 // ASSUMES `A` is square, and `b` is the same size
 // 2017.07.27
 void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>* b){
+	BCs[0][0] = bc[0][0];
+	BCs[0][1] = bc[0][1];
+	BCs[0][2] = bc[0][2];
+	BCs[1][0] = bc[1][0];
+	BCs[1][1] = bc[1][1];
+	BCs[1][2] = bc[1][2];
+
 	int icol;
 	int N = sqrt(A->size());
 
@@ -238,9 +321,64 @@ void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>
 	}	
 }
 
+//Build only the operator to reflect BCs
+void FEM::BuildBoundaryOperator(double const bc[2][3], vector<double>* A){
+	BCs[0][0] = bc[0][0];
+	BCs[0][1] = bc[0][1];
+	BCs[0][2] = bc[0][2];
+	BCs[1][0] = bc[1][0];
+	BCs[1][1] = bc[1][1];
+	BCs[1][2] = bc[1][2];
+
+	int icol;
+	int N = sqrt(A->size());
+
+	//Left
+	if(bc[0][0]==0){//Dirichlet
+		(*A)[0] = 1.0 * (zcoarse[1]-zcoarse[0]);		 //this scaling only makes sense if on same zgrid as FEM...
+		for(icol=1; icol< N; icol++){
+			(*A)[ij(0,icol,N)] = 0.0;
+		}
+	}else{//Mixed
+		(*A)[ij(0,0,N)] += bc[0][1];
+	}
+	//Right
+	if(bc[1][0]==0){//Dirichlet
+		(*A)[ij(N-1,N-1,N)] = 1.0 * (zcoarse[Nel]-zcoarse[Nel-1]);
+		for(icol=0; icol<N-1; icol++){
+			(*A)[ij(N-1,icol,N)] = 0.0;
+		}
+	}else{//Mixed
+		(*A)[ij(N-1,N-1,N)] -= bc[1][1];
+	}		
+}
+
+//Modify the source term to reflect BCs, using previously calculated BC
+//this way avoids repeatedly modifying the operator (which is wrong)
+void FEM::BuildBoundarySource(vector<double>* b){
+	int N = sqrt(Op.size());
+	if(b->size() != N){
+		cout << "Error: Source term's size incommensurate with operator Op stored in FEM object." << endl;
+		throw;
+	}
+
+	if(BCs[0][0]==0){//Dirichlet
+		(*b)[0] = BCs[0][2] * (zcoarse[1]-zcoarse[0]); //scale by length of element s.t. commensurate with scale of F.E.M.
+	}else{//Mixed
+		(*b)[0] -= BCs[0][2];
+	}
+	//Right
+	if(BCs[1][0]==0){//Dirichlet
+		(*b)[N-1] = BCs[1][2] * (zcoarse[Nel]-zcoarse[Nel-1]);
+	}else{//Mixed
+		(*b)[N-1] += BCs[1][2];
+	}	
+}
+
 // Building FEM integral
 // need to feed in a matrix of the kernel *evaluated* at the nodes
-// ASSUUMES input matrices are square and on same grid as stored in FEM object
+// ASSUMES input matrices are square and on same grid as stored in FEM object
+// zeroes the `Kout` matrix first.
 // 2017.07.27
 void FEM::BuildIntegral(vector<double>& kernel, vector<double> *Kout){
 	if(kernel.size() != Kout->size()){
@@ -281,6 +419,54 @@ void FEM::BuildIntegral(vector<double>& kernel, vector<double> *Kout){
 			}
 		}
 	}
+}
+
+// Gather pieces into final operator `A`
+// 2017.07.27
+void FEM::combineOperator(vector<double>& Lap, vector<double>& mass, vector<double>* A){
+	A->assign(Lap.begin(),Lap.end());
+	int ii,indColMajor;
+	int Npts = mass.size();
+	for(ii=0; ii<Npts; ii++){
+		indColMajor = ij(ii,ii,Npts);
+		(*A)[indColMajor] += mass[ii];
+	}
+}
+
+// Building Integro-Differential operator directly into an operator, 
+// to eliminate unnecessary clearing and copying
+// 2017.07.31
+void FEM::BuildIntDiffOperator(vector<double> &kernel, \
+	vector<double> &eps, vector<double> &mass, vector<double> *OpOut){
+
+	int clear = 0;
+	BuildIntegral(kernel, OpOut);
+	BuildLaplacian(eps, OpOut, clear);
+	BuildMassMatrix(mass, OpOut);
+}
+void FEM::BuildIntDiffOperator(vector<double> &kernel, \
+	vector<double> &eps, double mass, vector<double> *OpOut){
+
+	int clear = 0;
+	BuildIntegral(kernel, OpOut);
+	BuildLaplacian(eps, OpOut, clear);
+	BuildMassMatrix(mass, OpOut);
+}
+void FEM::BuildIntDiffOperator(vector<double> &kernel, \
+	double eps, vector<double> &mass, vector<double> *OpOut){
+
+	int clear = 0;
+	BuildIntegral(kernel, OpOut);
+	BuildLaplacian(OpOut, clear, eps); //unfortunately my Laplacian function with scalar eps has eps as last argument... (typically=1.0, can ignore)
+	BuildMassMatrix(mass, OpOut);
+}
+void FEM::BuildIntDiffOperator(vector<double> &kernel, \
+	double eps, double mass, vector<double> *OpOut){
+
+	int clear = 0;
+	BuildIntegral(kernel, OpOut);
+	BuildLaplacian(OpOut, clear, eps); //unfortunately my Laplacian function with scalar eps has eps as last argument... (typically=1.0, can ignore)
+	BuildMassMatrix(mass, OpOut);
 }
 
 

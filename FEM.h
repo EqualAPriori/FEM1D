@@ -60,13 +60,14 @@ public:
 			}
 			cout << endl;
 		}
+		cout << endl;
 	}
 	void printVec(vector<double>& vec){
 		int ii;
 		for(ii=0; ii<vec.size(); ii++){
 			cout << vec[ii] << " ";
 		}
-		cout << endl;
+		cout << endl << endl;
 	}
 	void printVec2D(vector<vector<double> >& mat){
 		int irow, icol;
@@ -76,6 +77,7 @@ public:
 			}
 			cout << endl;
 		}
+		cout << endl;
 	}
 	void printVec2D(vector<vector<int> >& mat){
 		int irow, icol;
@@ -85,10 +87,13 @@ public:
 			}
 			cout << endl;
 		}
+		cout << endl;
 	}
 
+
 //public:
-	FEM(int ord);
+	FEM(int ord=1); 		//has default value s.t. can call empty
+	void setOrder(int ord);
 	//~FEM();
 
 	// Initializations
@@ -96,22 +101,58 @@ public:
 	void GetGLL(int npts, vector<double>* xi, vector<double>* w, vector<vector<double> >* h); //write results into {xi,w,h}
 	
 	// Building and Assembling calculation
-	void BuildLaplacian(vector<double>& eps, vector<double>* D2out);
-	void BuildLaplacian(vector<double>& eps){ BuildLaplacian(eps, &D2); };
-	void BuildLaplacian(vector<double>* D2out);
-	void BuildLaplacian(){ BuildLaplacian(&D2); };
+	void BuildLaplacian(vector<double>& eps, vector<double>* D2out, bool clear=1);
+	void BuildLaplacian(vector<double>& eps, bool clear=1){ BuildLaplacian(eps, &D2, clear); };
+	void BuildLaplacian(vector<double>* D2out, bool clear=1, double eps=1.0 ); //unfortunately eps must be at end now.
+	void BuildLaplacian(bool clear=1){ BuildLaplacian(&D2, clear); };
 	
 	void BuildSource(vector<double>& source, vector<double>* fout);
 	void BuildSource(vector<double>& source){ BuildSource(source, &f); }
-	void BuildMass(vector<double>& mass, vector<double>* Mout);
+	void BuildSource(double source, vector<double>* fout);
+	void BuildSource(double source){ BuildSource(source, &f); }
+
+	void BuildMass(vector<double>& mass, vector<double>* Mout); //builds into Nx1 vector
 	void BuildMass(vector<double>& mass){ BuildMass(mass, &M); }
+	void BuildMass(double mass, vector<double> *Mout);
+	void BuildMass(double mass){ BuildMass(mass, &M); }
+	void BuildMassMatrix(vector<double>& mass, vector<double>* Mout); //builds into NxN matrix, *without* clearing
+	void BuildMassMatrix(double mass, vector<double> *Mout); //builds into NxN matrix, without clearing
 
 	void BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>* b);
 	void BuildBoundary(double const bc[2][3]){ BuildBoundary(bc, &Op, &f); };
 	void BuildBoundary(){ BuildBoundary(BCs, &Op, &f); }
+	void BuildBoundaryOperator(double const bc[2][3], vector<double>* A);
+	void BuildBoundaryOperator(double const bc[2][3]){ BuildBoundaryOperator(bc, &Op); }
+	void BuildBoundarySource(vector<double>* b);
+	void BuildBoundarySource(){ BuildBoundarySource(&f); }
 
 	void BuildIntegral(vector<double>& kernel, vector<double> *Kout);
 	void BuildIntegral(vector<double>& kernel){ BuildIntegral(kernel,&K); }
+
+	// Right now not gathering the integral kernel `K` yet.
+	void combineOperator(vector<double>& Lap, vector<double>& mass, vector<double>* A);
+	void combineOperator(){ combineOperator(D2, M, &Op); }
+
+	// Updated version for Green's Function calculation to allow direct assembling
+	// of operator into one matrix without zeroing or need for O(N^2) copying
+	// Right now don't have version for scalar eps + vectorial mass.
+	void BuildIntDiffOperator(vector<double> &kernel, vector<double> &eps, vector<double> &mass, vector<double> *OpOut);
+	void BuildIntDiffOperator(vector<double> &kernel, vector<double> &eps, vector<double> &mass){
+		BuildIntDiffOperator(kernel, eps, mass, &Op);
+	};
+	void BuildIntDiffOperator(vector<double> &kernel, vector<double> &eps, double mass, vector<double> *OpOut);
+	void BuildIntDiffOperator(vector<double> &kernel, vector<double> &eps, double mass){
+		BuildIntDiffOperator(kernel, eps, mass, &Op);
+	}
+	void BuildIntDiffOperator(vector<double> &kernel, double eps, vector<double> &mass, vector<double> *OpOut);
+	void BuildIntDIffOperator(vector<double> &kernel, double eps, vector<double> &mass){
+		BuildIntDiffOperator(kernel, eps, mass, &Op);
+	}
+	void BuildIntDiffOperator(vector<double> &kernel, double eps, double mass, vector<double> *OpOut);
+	void BuildIntDiffOperator(vector<double> &kernel, double eps, double mass){
+		BuildIntDiffOperator(kernel,eps,mass, &Op);
+	}
+
 
 	// Other utilities 
 	// Interestingly, if returning vector<double> can't separate into header and implementation...
@@ -132,7 +173,6 @@ public:
 	}
 	void xiToZ(vector<double>& xi, double zleft, double zright, vector<double>* z);
 	void zToXi(vector<double>& z, double zleft, double zright, vector<double>* xi);
-
 };
 
 #endif //defined (__FEM__)
