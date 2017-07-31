@@ -1,0 +1,53 @@
+// Old attempts at trying to use `dgesv` and `dgesvx`
+/*
+	int N = fpb.Nz;
+	int NRHS = 1;
+	int LDA = N;
+	int IPIV[N]; //not sure... not used
+	int LDB = N;
+	int INFO;
+	double *A = &fpb.Op[0]; //LAPACK takes double arrays. These are just alises
+	double *b = &fpb.f[0];
+	*/
+	/* //DGESV - leaves A matrix factorized...
+	vector<double> * psiNew = &fpb.f;
+	dgesv_(&N, &NRHS, A, &LDA, IPIV, b, &LDB, &INFO); //note that psiNew is now stored in b.
+	fpb.printVec(*psiNew);
+	*/
+
+	/*//Using dsgev, which uses a SINGLE PRECISION iterative refinement scheme, possibly leaves A untouched
+	vector<double> psiNew;
+	psiNew.resize(N);
+	int LDX = N;
+	double WORK[N];
+	float SWORK[N*(N+1)];
+	int iter;
+	dgesv_(&N, &NRHS, A, &LDA, IPIV, b, &LDB, &psiNew[0], &LDX, WORK, SWORK, &iter, &INFO);
+	cout << "Solver info " << iter << " " << INFO << endl;
+	fpb.printVec(fpb.f);
+	fpb.printVec(psiNew);
+	*/
+
+	/*
+	// dgesvx - provides a working matrix AF s.t. work is stored in AF instead. 
+	// may be beneficial to allocate these matrices beforehand s.t. 
+	// don't have to repeatedly allocate and free memory
+	char FACT = 'N';
+	char TRANS = 'N';
+	double AF[N*N];
+	int LDAF = N;
+	char EQED = 'N';
+	double R[N];
+	double C[N];
+	vector<double> psiNew;	psiNew.resize(N,0);
+	int LDX = N;
+	double RCOND;
+	double FERR[1];
+	double BERR[1];
+	double WORK[4*N];
+	int IWORK[N];
+	dgesvx_(&FACT, &TRANS, &N, &NRHS, A, &LDA, AF, &LDAF, IPIV, &EQED, R, C, b,  &LDB, &psiNew[0], &LDX,\
+		&RCOND, FERR, BERR, WORK, IWORK, &INFO );
+	fpb.printVec(fpb.f);
+	fpb.printVec(psiNew);
+	*/
