@@ -74,6 +74,8 @@ void Green::setlb(double lbs, double lbw){
 // whereas the K(0)=K(0,0) term of the Kernel diagonal Vector will have a 0.5 factor 
 // --> off by factor of 2!
 //
+// Also, recall that the kernel is supposed to be ~kap^2, not kappa
+//
 void Green::BuildBareOperator(vector<double> &kernel, double eps){
 	bool diagonal;
 	if(kernel.size() == fe.Nz){
@@ -141,10 +143,11 @@ void Green::modifyDeltaFtnKernel( double kernel, vector<double> *Op){
 // Modifying just the wave-number contribution (which is diagonal!)
 // object keeps track of previous k used s.t. only have to modify diagonal instead of completely
 // rebuilding the entire dense, square matrix
+// feed in bare wavenumber, the function will square it automatically
 void Green::kOperator(double k, vector<double> *Op){
-	fe.BuildMassMatrix(kprev, Op);
-	fe.BuildMassMatrix(k, Op);
-	kprev = - k; //store the NEGATIVE of the wavenumber `k` for undoing later on.
+	fe.BuildMassMatrix(k2prev, Op);
+	fe.BuildMassMatrix(k*k, Op);
+	k2prev = - k*k; //store the NEGATIVE of the wavenumber `k` for undoing later on.
 }
 
 
@@ -176,7 +179,7 @@ void Green::solve(double z0, double k){
 // as argument takes INDEX into the desired node.
 void Green::buildDelta(int loc, vector<double> *f){
 	fill((*f).begin(), (*f).end(), 0.0);
-	(*f)[loc] = 1.0;
+	(*f)[loc] = 1.0*4*M_PI*lb;
 }
 // version where cartesian COORDINATE of node is given. use binary search to find index fast.
 // alternative is to use a recursive binarySearch function

@@ -33,7 +33,7 @@ public:
 	int Nz = 101;
 	double dx = 0.1;
 
-	double kprev = 0.0;				// keeping track for easy undoing later on
+	double k2prev = 0.0;			// keeping track for easy undoing later on. Note is k^2
 	vector<double> diagKernelPrev;
 	vector<double> nodes;			// coarse node list. FEM may refine it.
 	vector<double> psi;				// the most recently solved instance of the Green's ftn

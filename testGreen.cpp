@@ -45,15 +45,15 @@ int main(){
 	vector<double> z1;
 	z1.reserve(601);
 	double x;
-	for(x=0.0; x<30.0; x+=0.5){
+	for(x=0.0; x<50.0; x+=0.5){
 		z1.push_back(x);
 	}
 	Green g1(2);
 	g1.setGrid(z1);
-	vector<double> ker(g1.fe.Nz,0.1);
-	g1.BuildBareOperator(ker);
-	double z0 = 10.0;
-	double kw = 0.1;
+	vector<double> kap2(g1.fe.Nz,0.1);
+	g1.BuildBareOperator(kap2);
+	double z0 = 25.0;
+	double kw = sqrt(0.1);
 	g1.solve(z0, kw);
 	g1.fe.printVec(g1.psi);
 
