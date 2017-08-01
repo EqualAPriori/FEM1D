@@ -4,7 +4,7 @@
 In addition, the FEM code has been used to solve new Poisson Boltzmann and electrostatic fluctuation (self energy) problems, based on the work of [Wang 2010, PRE 81 (021401)](http://link.aps.org/doi/10.1103/PhysRevE.81.021501) and [Wang and Wang 2015, JCP 142 (104705)](http://dx.doi.org/10.1063/1.4914170), where the Green's function (fluctuations) are the result of the ionic screening of point charges. We now do calculations within the same renormalied Gaussian fluctuation theory, but where the ionic screening can come from objects of finite size and shape. The importance of these non-point-charge screening objects was discussed for polyelectrolytes in [Shen and Wang 2017, JCP 146 (084901)](http://dx.doi.org/10.1063/1.4975777).
 
 ## Getting Started
-Compilation command on (Mac):
+Compilation command (on Mac):
 clang++ -std=c++11 -L/usr/local/opt/openblas/lib -lopenblas -llapack  -O3 FEM.cpp PB.cpp Green.cpp main.cpp -o ./out
 
 ### Prerequisites:
@@ -41,5 +41,5 @@ Objects:
 Kevin Shen
 
 ## Acknowledgments
-* README template borrowed from [PurpleBooth](ttps://gist.github.com/PurpleBooth/109311bb0361f32d87a2#file-readme-template-md)
+* README template borrowed from [PurpleBooth](https://gist.github.com/PurpleBooth/109311bb0361f32d87a2#file-readme-template-md)
 * FEM method referenced heavily from [Professor Jean Paul Ampuero](http://web.gps.caltech.edu/~ampuero/) and his [lecture notes](https://pdfs.semanticscholar.org/de95/5fb1f0d63f378f705ae8d97c9422f37e62f9.pdf)
