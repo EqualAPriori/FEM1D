@@ -117,6 +117,8 @@ void FEM::BuildLaplacian(vector<double>* D2out, bool clear, double eps ){
 	int el,ii,jj,kk,ind1,ind2,indColMajor;
 	double jacob;
 
+	//cout << "clear flag: " << clear << " scalar eps: " << eps << endl;
+
 	//sparse zero-resetting. must be done separately from assembly becuase there are repeats
 	//other elements were already zeroed in setGrid();
 	//reset ONLY if boolean flag=1 (default)
@@ -305,8 +307,8 @@ void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>
 			(*A)[ij(0,icol,N)] = 0.0;
 		}
 	}else{//Mixed
-		(*b)[0] -= bc[0][2];
-		(*A)[ij(0,0,N)] += bc[0][1];
+		(*b)[0] -= bc[0][2]; // -beta
+		(*A)[ij(0,0,N)] += bc[0][1]; // +alpha
 	}
 	//Right
 	if(bc[1][0]==0){//Dirichlet
@@ -316,8 +318,8 @@ void FEM::BuildBoundary(double const bc[2][3], vector<double>* A, vector<double>
 			(*A)[ij(N-1,icol,N)] = 0.0;
 		}
 	}else{//Mixed
-		(*b)[N-1] += bc[1][2];
-		(*A)[ij(N-1,N-1,N)] -= bc[1][1];
+		(*b)[N-1] += bc[1][2]; // +beta
+		(*A)[ij(N-1,N-1,N)] -= bc[1][1]; // -alpha
 	}	
 }
 
@@ -443,7 +445,7 @@ void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	BuildIntegral(kernel, OpOut);
 	BuildLaplacian(eps, OpOut, clear);
 	BuildMassMatrix(mass, OpOut);
-}
+}//vector eps, vector mass
 void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	vector<double> &eps, double mass, vector<double> *OpOut){
 
@@ -451,7 +453,7 @@ void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	BuildIntegral(kernel, OpOut);
 	BuildLaplacian(eps, OpOut, clear);
 	BuildMassMatrix(mass, OpOut);
-}
+}//vector eps, scalar mass
 void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	double eps, vector<double> &mass, vector<double> *OpOut){
 
@@ -459,7 +461,7 @@ void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	BuildIntegral(kernel, OpOut);
 	BuildLaplacian(OpOut, clear, eps); //unfortunately my Laplacian function with scalar eps has eps as last argument... (typically=1.0, can ignore)
 	BuildMassMatrix(mass, OpOut);
-}
+}//scalar eps, vector mass
 void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	double eps, double mass, vector<double> *OpOut){
 
@@ -467,7 +469,7 @@ void FEM::BuildIntDiffOperator(vector<double> &kernel, \
 	BuildIntegral(kernel, OpOut);
 	BuildLaplacian(OpOut, clear, eps); //unfortunately my Laplacian function with scalar eps has eps as last argument... (typically=1.0, can ignore)
 	BuildMassMatrix(mass, OpOut);
-}
+}//scalar eps, scalar mass
 
 
 // Gauss-Lobatto-Legendre quadrature values. Taken from Ampuero (Caltech) and Wolfram

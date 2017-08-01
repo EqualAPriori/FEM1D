@@ -150,7 +150,6 @@ void PB::solve(){
 	}else if(err < tol){
 		cout << "Successful convergence, " << iterations << " iterations: with error: " << err << endl;
 	}
-
 }
 
 

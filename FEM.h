@@ -104,7 +104,7 @@ public:
 	void BuildLaplacian(vector<double>& eps, vector<double>* D2out, bool clear=1);
 	void BuildLaplacian(vector<double>& eps, bool clear=1){ BuildLaplacian(eps, &D2, clear); };
 	void BuildLaplacian(vector<double>* D2out, bool clear=1, double eps=1.0 ); //unfortunately eps must be at end now.
-	void BuildLaplacian(bool clear=1){ BuildLaplacian(&D2, clear); };
+	void BuildLaplacian(bool clear=1, double eps=1.0){ BuildLaplacian(&D2, clear, eps); };
 	
 	void BuildSource(vector<double>& source, vector<double>* fout);
 	void BuildSource(vector<double>& source){ BuildSource(source, &f); }
